@@ -1,0 +1,7 @@
+# Skärmbilder och lokala testdata committas aldrig (kan innehålla privata bilder)
+*.png
+*.jpg
+*.jpeg
+*.json
+!package.json
+node_modules/

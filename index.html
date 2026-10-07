@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Föreläsningar: anteckningar, PLAUD-transkript och bilder i samma tidslinje, med flashcards. Allt stannar i webbläsaren.">
+<meta name="theme-color" content="#2b6cb0">
+<title>Föreläsningar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232b6cb0'/%3E%3Cpath d='M14 18h36v24H14z' fill='none' stroke='white' stroke-width='4'/%3E%3Cpath d='M26 50l6-8 6 8' fill='none' stroke='white' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/"><span class="logo" aria-hidden="true">▣</span> Föreläsningar</a>
+  <nav>
+    <a class="btn ghost" href="#/ny">+ Ny</a>
+    <button class="btn ghost icon" id="theme" type="button" title="Byt ljust/mörkt läge" aria-label="Byt ljust/mörkt läge">◐</button>
+  </nav>
+</header>
+<main id="app" tabindex="-1"><p class="muted pad">Laddar …</p></main>
+<footer class="foot">
+  <p><strong>Integritet:</strong> allt du skriver och alla bilder sparas bara i den här webbläsaren (IndexedDB). Sidan har ingen server och laddar aldrig upp något – nätverksanrop är spärrade med Content-Security-Policy. En exportfil delar du bara om du själv väljer det.</p>
+</footer>
+<dialog id="lightbox" aria-label="Bild i större vy">
+  <figure><img id="lb-img" alt=""><figcaption id="lb-cap"></figcaption></figure>
+  <div class="lb-nav">
+    <button class="btn ghost" id="lb-prev" type="button">‹ Föregående</button>
+    <button class="btn" id="lb-close" type="button">Stäng</button>
+    <button class="btn ghost" id="lb-next" type="button">Nästa ›</button>
+  </div>
+</dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="forelasningar.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

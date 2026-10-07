@@ -138,4 +138,51 @@ test('formattering', () => {
   assert.equal(F.toLocalInput(start), '2026-10-07T10:00:00');
 });
 
+
+/* ---- "Ta bara med från" (BT-start) ---- */
+test('standardgräns är 2026-10-19 lokal midnatt', () => {
+  assert.equal(F.DEFAULT_CUTOFF, '2026-10-19');
+  const d = F.cutoffDate();
+  assert.deepEqual([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()], [2026, 9, 19, 0]);
+  assert.equal(F.cutoffDate('skräp').getDate(), 19);
+  assert.equal(F.cutoffDate('2026-02-31').getDate(), 19); // ogiltigt datum → standard
+});
+test('isBeforeCutoff', () => {
+  assert.equal(F.isBeforeCutoff(new Date(2026, 9, 18, 23, 59, 59)), true);
+  assert.equal(F.isBeforeCutoff(new Date(2026, 9, 19, 0, 0, 0)), false);
+  assert.equal(F.isBeforeCutoff(null), false);
+  assert.equal(F.isBeforeCutoff(new Date(2026, 9, 7), '2026-10-01'), false);
+});
+test('föreläsning före BT-start avvisas med förklaring', () => {
+  assert.match(F.lectureCutoffError(new Date(2026, 9, 7, 10)), /före BT-start/);
+  assert.equal(F.lectureCutoffError(new Date(2026, 9, 20, 10)), null);
+  assert.equal(F.lectureCutoffError(new Date(2026, 9, 7, 10), '2026-10-01'), null);
+});
+test('bilder före BT-start sållas oavsett tidskälla', () => {
+  const ph = [
+    { id: 'a', ...F.photoTime({ exif: new Date(2026, 9, 18, 9) }) },
+    { id: 'b', ...F.photoTime({ name: 'IMG_20261015_101530.jpg' }) },
+    { id: 'c', ...F.photoTime({ name: 'x.jpg', lastModified: new Date(2026, 9, 1).getTime() }) },
+    { id: 'd', ...F.photoTime({ name: 'PXL_20261020_080000000.jpg' }) },
+    { id: 'e', name: 'utan-tid.jpg', takenAt: null, source: 'saknas' },
+  ];
+  const { kept, rejected } = F.filterPhotosByCutoff(ph);
+  assert.deepEqual(rejected.map((p) => p.id), ['a', 'b', 'c']);
+  assert.ok(rejected.every((p) => p.reason === 'före BT-start'));
+  assert.deepEqual(kept.map((p) => p.id), ['d', 'e']);
+});
+test('import sållar gamla föreläsningar och bilder', () => {
+  const { accepted, rejected } = F.filterImportByCutoff([
+    { id: 'gammal', title: 'Gammal', startedAt: new Date(2026, 9, 7, 10).toISOString(), photos: [] },
+    { id: 'ny', title: 'Ny', startedAt: new Date(2026, 9, 20, 10).toISOString(),
+      photos: [{ id: 'p1', takenAt: new Date(2026, 9, 20, 10, 5).toISOString() }, { id: 'p0', takenAt: new Date(2026, 9, 10).toISOString() }],
+      images: [{ id: 'p1' }, { id: 'p0' }] },
+  ]);
+  assert.deepEqual(rejected.map((r) => r.id), ['gammal']);
+  assert.equal(accepted.length, 1);
+  assert.deepEqual(accepted[0].photos.map((p) => p.id), ['p1']);
+  assert.deepEqual(accepted[0].images.map((p) => p.id), ['p1']);
+  assert.equal(accepted[0].droppedPhotos, 1);
+});
+
 console.log(`forelasningar: ${n} prover gröna`);

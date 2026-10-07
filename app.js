@@ -32,6 +32,23 @@
   applyTheme(theme);
   $('#theme').addEventListener('click', () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; writeLS('forel-tema', theme); applyTheme(theme); toast($('#theme').title); });
 
+  /* ---------- "Ta bara med från" (BT-start) ---------- */
+  function getCutoff() { const v = readLS('forel-fran', F.DEFAULT_CUTOFF); return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : F.DEFAULT_CUTOFF; }
+  function cutoffHtml() {
+    return `<div class="row cutoff"><label for="cutoff" style="margin:0">Ta bara med från</label>
+      <input type="date" id="cutoff" value="${esc(getCutoff())}" style="width:auto">
+      ${getCutoff() !== F.DEFAULT_CUTOFF ? `<button class="btn ghost" type="button" id="cutoff-reset" style="min-height:34px;padding:2px 10px">Återställ (${F.DEFAULT_CUTOFF})</button>` : ''}
+      <span class="hint">Anteckningar, inspelningar och bilder före detta datum (BT-start) tas inte med.</span></div>`;
+  }
+  function wireCutoff() {
+    const inp = $('#cutoff'); if (!inp) return;
+    inp.addEventListener('change', () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(inp.value)) { toast('Ogiltigt datum'); inp.value = getCutoff(); return; }
+      writeLS('forel-fran', inp.value); toast(`Tar bara med från ${inp.value}`); route();
+    });
+    const r = $('#cutoff-reset'); if (r) r.addEventListener('click', () => { writeLS('forel-fran', F.DEFAULT_CUTOFF); route(); });
+  }
+
   /* ---------- IndexedDB ---------- */
   let dbp;
   function db() {
@@ -124,6 +141,7 @@
           <label class="btn ghost" style="margin:0">Importera<input type="file" id="imp" accept=".json,application/json" hidden></label>
           ${list.length ? '<button class="btn ghost" id="expall" type="button">Exportera alla</button>' : ''}
         </div></div>
+      <div class="panel">${cutoffHtml()}</div>
       <p class="privacy">Allt sparas bara i den här webbläsaren. Inget laddas upp automatiskt – bilderna kan vara patientnära eller föreställa andra, så dela exportfiler med eftertanke.</p>
       ${list.length ? `<div class="lib">${list.map((l) => {
         const due = F.dueCards(l.cards, l.progress, now).length;
@@ -135,6 +153,7 @@
           <span class="row"><span class="chip">${(l.photos || []).length} bilder</span><span class="chip">${(l.cards || []).length} kort</span>${due ? `<span class="chip note">${due} att repetera</span>` : ''}</span>
         </a>`; }).join('')}</div>`
       : `<div class="panel empty"><h2>Inga föreläsningar än</h2><p class="muted">Skriv anteckningar live under föreläsningen, eller lägg in PLAUD-transkriptet efteråt – och välj bilderna du tog. De hamnar på rätt plats i tidslinjen.</p><a class="btn" href="#/ny">Skapa den första</a></div>`}`;
+    wireCutoff();
     $('#imp').addEventListener('change', (e) => importFile(e.target.files[0]).catch((err) => fail(err, 'Import')));
     const ea = $('#expall'); if (ea) ea.addEventListener('click', () => exportLectures(list).catch((err) => fail(err, 'Export')));
   }
@@ -171,9 +190,11 @@
     try { data = JSON.parse(await file.text()); } catch (e) { throw new Error('Filen är inte giltig JSON.'); }
     if (!data || data.app !== 'forelasningar' || !Array.isArray(data.lectures)) throw new Error('Det här är ingen exportfil från Föreläsningar.');
     const existing = new Set((await store.all()).map((l) => l.id));
+    const valid = data.lectures.filter((raw) => raw && typeof raw.id === 'string' && typeof raw.title === 'string');
+    const { accepted, rejected } = F.filterImportByCutoff(valid, getCutoff());
+    const droppedPhotos = accepted.reduce((n, l) => n + (l.droppedPhotos || 0), 0);
     let count = 0;
-    for (const raw of data.lectures) {
-      if (!raw || typeof raw.id !== 'string' || typeof raw.title !== 'string') continue;
+    for (const { droppedPhotos: _dropped, ...raw } of accepted) {
       if (existing.has(raw.id) && !confirm(`"${raw.title}" finns redan. Skriva över den?`)) continue;
       const { images = [], ...lecture } = raw;
       lecture.photos = Array.isArray(lecture.photos) ? lecture.photos : [];
@@ -185,7 +206,9 @@
       await store.saveLecture(lecture, imgs, []);
       count++;
     }
-    toast(`${count} föreläsning${count === 1 ? '' : 'ar'} importerade`);
+    const why = [rejected.length ? `${rejected.length} föreläsning${rejected.length === 1 ? '' : 'ar'} före BT-start (${getCutoff()}) hoppades över` : '', droppedPhotos ? `${droppedPhotos} bilder före BT-start sållades bort` : ''].filter(Boolean).join(', ');
+    toast(`${count} föreläsning${count === 1 ? '' : 'ar'} importerade${why ? ' – ' + why : ''}`);
+    if (rejected.length) alert(`Hoppade över (före BT-start ${getCutoff()}):\n` + rejected.map((r) => `• ${r.title}`).join('\n'));
     route();
   }
 
@@ -221,6 +244,9 @@
       photos: [], cards: [], progress: {}, createdAt: new Date().toISOString(),
     };
     const newBlobs = new Map(); // id -> blob (ej sparade än)
+    const oldPhotos = []; // sållade: före BT-start
+    const cutoff = getCutoff();
+    const showWarn = (msg) => { const w = $('#cutoff-warn'); w.hidden = !msg; w.textContent = msg || ''; if (msg && w.scrollIntoView) w.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
     const removed = new Set();
     let dirty = false;
     document.title = existing ? `Redigera · ${existing.title}` : 'Ny föreläsning';
@@ -228,6 +254,8 @@
     app.innerHTML = `
       <h1>${existing ? 'Redigera föreläsning' : 'Ny föreläsning'}</h1>
       <p class="privacy">Allt du lägger in här stannar i den här webbläsaren. Inget laddas upp.</p>
+      <section class="panel">${cutoffHtml()}</section>
+      <p class="warn" id="cutoff-warn" hidden></p>
       <section class="panel">
         <div class="grid2">
           <div><label for="e-title">Titel</label><input type="text" id="e-title" maxlength="200" placeholder="t.ex. Kardiologi – hjärtsvikt" value="${esc(draft.title)}"></div>
@@ -259,6 +287,7 @@
         <label class="hint" style="font-weight:600"><input type="checkbox" id="e-shrink" checked> Förminska till max 2000 px (sparar utrymme; tiden läses före förminskningen)</label>
         <p class="hint">Tid tas i första hand ur EXIF, annars ur filnamnet (IMG_20261007_101530, PXL_…), annars filens ändringstid – källan visas på varje bild.</p>
         <div class="plist" id="plist"></div>
+        <div id="oldphotos"></div>
       </section>
 
       <section class="panel">
@@ -293,6 +322,9 @@
     };
     const markDirty = () => { dirty = true; schedulePreview(); };
 
+    function renderOldPhotos() {
+      $('#oldphotos').innerHTML = oldPhotos.length ? `<div class="warn" style="margin-top:10px"><strong>Före BT-start (${esc(cutoff)}) – ${oldPhotos.length} bilder sållades bort:</strong><ul class="small">${oldPhotos.map((p) => `<li>${esc(p.name)} – ${esc(p.takenAt ? new Date(p.takenAt).toLocaleString('sv-SE') : '')} (${esc(SRC_LABEL[p.source] || p.source)})</li>`).join('')}</ul></div>` : '';
+    }
     async function renderPhotos() {
       const ps = [...draft.photos].sort((a, b) => String(a.takenAt).localeCompare(String(b.takenAt)));
       const u = {}; for (const p of ps) u[p.id] = await thumbUrl(p);
@@ -320,6 +352,9 @@
         $('#e-off-min').value = Math.trunc(off / 60); $('#e-off-sec').value = off % 60;
       }
       const pv = $('#preview');
+      const cerr = F.lectureCutoffError(draft.startedAt, cutoff);
+      if (cerr) { showWarn(cerr); pv.innerHTML = `<p class="warn">${esc(cerr)}</p>`; $('#pv-stats').textContent = ''; return; }
+      $('#cutoff-warn').hidden = true;
       if (!draft.startedAt || (!draft.transcript.trim() && !draft.notes.trim())) { pv.innerHTML = '<p class="muted">Lägg in transkript eller anteckningar och ange starttid.</p>'; $('#pv-stats').textContent = ''; return; }
       let model;
       try { model = lectureModel(draft); } catch (e) { pv.innerHTML = `<p class="warn">${esc(e.message)}</p>`; return; }
@@ -341,6 +376,12 @@
       const f = e.target.files[0]; if (!f) return;
       try {
         if (f.size > 20 * 1024 * 1024) throw new Error('Transkriptet är större än 20 MB.');
+        const guessed = F.timeFromFilename(f.name);
+        if (guessed && F.isBeforeCutoff(guessed, cutoff)) {
+          e.target.value = '';
+          showWarn(`Transkriptet "${f.name}" är från ${guessed.toLocaleDateString('sv-SE')}, före BT-start ${cutoff}. Det togs inte med.`);
+          return;
+        }
         draft.transcript = await f.text(); draft.transcriptName = f.name;
         $('#file-info').innerHTML = `Inläst: ${esc(f.name)} <button class="btn ghost" id="file-clear" type="button" style="min-height:30px;padding:2px 10px">Ta bort</button>`;
         bindClear();
@@ -361,7 +402,11 @@
       toast(`Läser ${files.length} bilder …`);
       let n = 0;
       for (const f of files) {
-        try { const p = await ingestPhoto(f, shrinkOn); newBlobs.set(p.id, p.blob); delete p.blob; draft.photos.push(p); n++; }
+        try {
+          const p = await ingestPhoto(f, shrinkOn);
+          if (F.isBeforeCutoff(p.takenAt, cutoff)) { delete p.blob; oldPhotos.push({ ...p, reason: 'före BT-start' }); continue; }
+          newBlobs.set(p.id, p.blob); delete p.blob; draft.photos.push(p); n++;
+        }
         catch (err) { fail(err, f.name); }
       }
       e.target.value = '';
@@ -369,7 +414,7 @@
         const first = draft.photos.map((p) => p.takenAt).filter(Boolean).sort()[0];
         if (first) { draft.startedAt = first; $('#e-start').value = F.toLocalInput(first); $('#start-hint').textContent = 'Starttid satt till första bildens tid – justera vid behov.'; }
       }
-      toast(`${n} bilder tillagda`); renderPhotos(); markDirty();
+      toast(`${n} bilder tillagda${oldPhotos.length ? ` · ${oldPhotos.length} före BT-start sållade` : ''}`); renderPhotos(); renderOldPhotos(); markDirty();
     });
     // offset
     const setOffset = (v) => { draft.offsetSec = Math.max(-86400, Math.min(86400, Math.round(+v || 0))); markDirty(); };
@@ -384,6 +429,8 @@
     function stopLive() { clearInterval(liveTimer); liveTimer = null; $('#live').hidden = true; $('#live').innerHTML = ''; $('#live-on').textContent = '● Live-anteckning'; }
     $('#live-on').addEventListener('click', () => {
       if (liveTimer) { stopLive(); return; }
+      if (F.isBeforeCutoff(new Date(), cutoff)) { showWarn(`Live-anteckning är avstängd före BT-start (${cutoff}). Anteckningar före det datumet tas inte med.`); return; }
+      if (draft.startedAt && F.isBeforeCutoff(draft.startedAt, cutoff)) { showWarn(F.lectureCutoffError(draft.startedAt, cutoff)); return; }
       if (!draft.startedAt) { const now = new Date(); now.setMilliseconds(0); draft.startedAt = now.toISOString(); $('#e-start').value = F.toLocalInput(now); $('#start-hint').textContent = 'Starttid satt till när live-anteckningen startade.'; }
       const box = $('#live'); box.hidden = false;
       box.innerHTML = `<div class="panel live"><div class="spread"><span class="live-clock" id="live-clock"></span><span class="hint">Enter sparar raden med aktuell klocktid</span></div>
@@ -410,6 +457,8 @@
     }
 
     async function persist(showToast) {
+      const cerr = F.lectureCutoffError(draft.startedAt, cutoff);
+      if (cerr) { showWarn(cerr); throw new Error('Sparas inte – föreläsningen är före BT-start.'); }
       if (!draft.title.trim()) draft.title = `Föreläsning ${new Date(draft.startedAt).toLocaleDateString('sv-SE')}`;
       const model = lectureModel(draft);
       // behåll egna/redigerade kort, ersätt autogenererade som inte rörts
@@ -424,12 +473,15 @@
     }
     $('#save').addEventListener('click', async () => {
       if (!draft.startedAt) { toast('Ange när inspelningen började.'); $('#e-start').focus(); return; }
+      const cerr = F.lectureCutoffError(draft.startedAt, cutoff);
+      if (cerr) { showWarn(cerr); toast('Sparas inte – föreläsningen är före BT-start.'); return; }
       try { await persist(true); stopLive(); location.hash = `#/f/${encodeURIComponent(draft.id)}`; }
       catch (e) { fail(e, 'Kunde inte spara'); }
     });
     const beforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', beforeUnload);
     cleanup = () => { stopLive(); clearTimeout(pvTimer); window.removeEventListener('beforeunload', beforeUnload); };
+    wireCutoff();
     await renderPhotos();
     await renderPreview();
   }

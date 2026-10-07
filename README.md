@@ -13,6 +13,8 @@ Fristående webbsida (ren HTML/CSS/JS, inga beroenden) där anteckningar, PLAUD-
 - **Bibliotek:** allt i IndexedDB (bilder som blobbar); öppna, radera, exportera/importera som en JSON-fil (bilder base64).
 - **Flashcards:** genereras ur avsnitten (lucktext eller nyckelordsfråga, svar = texten, bild om sådan finns), vändkort, Igen/Svår/Bra/Lätt med SM-2 (samma kurva som MedHop). Kort kan redigeras, tas bort och läggas till.
 
+- **Ta bara med från (BT-start):** inställning med standard 2026-10-19 (sparas lokalt, går att ändra). Föreläsningar som startar före datumet sparas inte (sidan förklarar varför); bilder vars tid (EXIF/filnamn/filtid) ligger före sållas och listas som "före BT-start"; live-anteckning och transkript med äldre datum avvisas; JSON-import hoppar över äldre föreläsningar och bilder.
+
 ## Integritet
 Inget laddas upp. Sidan har ingen server och en Content-Security-Policy med `connect-src 'none'` spärrar alla nätverksanrop från sidans kod. Data finns bara i webbläsaren där den skapades – exportera för att flytta.
 

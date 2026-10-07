@@ -272,6 +272,48 @@
     return (cards || []).filter((c) => { const s = progress && progress[c.id]; return !s || s.due <= t; });
   }
 
+
+  /* ---------- "Ta bara med från" (BT-start 2026-10-19) ----------
+     Allt med tid före gränsdatumet (lokal midnatt) sållas bort. */
+  const DEFAULT_CUTOFF = '2026-10-19';
+  function cutoffDate(value) {
+    const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    return d && !Number.isNaN(d.getTime()) && d.getMonth() === +m[2] - 1 ? d : cutoffDate(DEFAULT_CUTOFF);
+  }
+  function isBeforeCutoff(date, cutoff) {
+    if (date == null) return false;
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.getTime() < cutoffDate(cutoff).getTime();
+  }
+  function cutoffLabel(cutoff) { return cutoffDate(cutoff).toLocaleDateString('sv-SE'); }
+  /* null = ok, annars förklaring på svenska */
+  function lectureCutoffError(startedAt, cutoff) {
+    const d = new Date(startedAt);
+    if (startedAt == null || Number.isNaN(d.getTime())) return null;
+    return isBeforeCutoff(d, cutoff)
+      ? `Inspelningen började ${d.toLocaleDateString('sv-SE')}, före BT-start ${cutoffLabel(cutoff)}. Sidan tar bara med föreläsningar från och med ${cutoffLabel(cutoff)} (ändra under "Ta bara med från").`
+      : null;
+  }
+  function filterPhotosByCutoff(photos, cutoff) {
+    const kept = [], rejected = [];
+    for (const p of photos || []) (isBeforeCutoff(p.takenAt, cutoff) ? rejected.push({ ...p, reason: 'före BT-start' }) : kept.push(p));
+    return { kept, rejected };
+  }
+  /* Import: släpp föreläsningar före gränsen, sålla äldre bilder i resten */
+  function filterImportByCutoff(lectures, cutoff) {
+    const accepted = [], rejected = [];
+    for (const l of lectures || []) {
+      const err = l && lectureCutoffError(l.startedAt, cutoff);
+      if (err) { rejected.push({ id: l.id, title: l.title, reason: err }); continue; }
+      const { kept, rejected: old } = filterPhotosByCutoff(l && l.photos, cutoff);
+      const drop = new Set(old.map((p) => p.id));
+      accepted.push({ ...l, photos: kept, images: (l.images || []).filter((im) => !drop.has(im.id)), droppedPhotos: old.length });
+    }
+    return { accepted, rejected };
+  }
+
   return { parseStamp, parseTranscript, parseNotes, groupCues, exifDateFromJpeg, timeFromFilename, photoTime,
-    keywordsOf, buildLecture, syncLecture, generateFlashcards, grade, dueCards, newState, fmtTime, fmtClock, toLocalInput };
+    keywordsOf, buildLecture, DEFAULT_CUTOFF, cutoffDate, isBeforeCutoff, cutoffLabel, lectureCutoffError, filterPhotosByCutoff, filterImportByCutoff, syncLecture, generateFlashcards, grade, dueCards, newState, fmtTime, fmtClock, toLocalInput };
 });

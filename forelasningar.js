@@ -314,6 +314,38 @@
     return { accepted, rejected };
   }
 
+  /* ---------- Export till MedHop (delat kortformat) ----------
+     MedHop (medhop.vercel.app → Importera → Fil) läser ett deck-objekt
+     {id,title,emoji,color,segments:[{id,title,cards:[{type,front,back,tags}]}]}
+     och sparar det under "Mina kort" i webbläsaren, med MedHops egen SM-2.
+     Samma format används av BT-sidans privata MedHop-synk. Här: ett segment per
+     föreläsning, bara text (inga bilder), föreläsningar före gränsdatumet hoppas
+     över och personnummer maskeras. Inget skickas någonstans – det blir en fil. */
+  const PNR_RE = /\b(?:19|20)?\d{6}[-+ ]?\d{4}\b/g;
+  function maskText(s) { return String(s == null ? '' : s).replace(PNR_RE, '[MASKAT]').trim(); }
+  function toMedHopDeck(lectures, opts) {
+    const o = opts || {};
+    const cutoff = o.cutoff || DEFAULT_CUTOFF;
+    const segments = [], skipped = [];
+    const sorted = [...(lectures || [])].filter(Boolean).sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
+    for (const l of sorted) {
+      const err = lectureCutoffError(l.startedAt, cutoff);
+      if (err) { skipped.push({ id: l.id, title: l.title, reason: 'före gränsdatumet' }); continue; }
+      const d = new Date(l.startedAt);
+      const datum = Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const cards = (l.cards || [])
+        .map((c) => ({ type: 'basic', front: maskText(c.question), back: maskText(c.answer),
+          tags: ['föreläsning', c.category].filter(Boolean).map(String) }))
+        .filter((c) => c.front && c.back && c.front !== '(tom fråga)');
+      if (!cards.length) { skipped.push({ id: l.id, title: l.title, reason: 'inga kort' }); continue; }
+      segments.push({ id: `fl-${String(l.id).replace(/[^\w-]/g, '')}`, title: `${datum ? datum + ' · ' : ''}${maskText(l.title) || 'Föreläsning'}`, cards });
+    }
+    const deck = { id: o.id || 'forelasningar-export', title: o.title || 'Föreläsningar (egna kort)', emoji: '🎓', color: '#0f9d8a',
+      _format: 'medhop-deck-v1', _kalla: 'Föreläsningar (egna anteckningar)', exportedAt: (o.now ? new Date(o.now) : new Date()).toISOString(), segments };
+    return { deck, skipped, count: segments.reduce((n, s) => n + s.cards.length, 0) };
+  }
+
   return { parseStamp, parseTranscript, parseNotes, groupCues, exifDateFromJpeg, timeFromFilename, photoTime,
-    keywordsOf, buildLecture, DEFAULT_CUTOFF, cutoffDate, isBeforeCutoff, cutoffLabel, lectureCutoffError, filterPhotosByCutoff, filterImportByCutoff, syncLecture, generateFlashcards, grade, dueCards, newState, fmtTime, fmtClock, toLocalInput };
+    keywordsOf, buildLecture, DEFAULT_CUTOFF, cutoffDate, isBeforeCutoff, cutoffLabel, lectureCutoffError, filterPhotosByCutoff, filterImportByCutoff, syncLecture, generateFlashcards, grade, dueCards, newState, fmtTime, fmtClock, toLocalInput,
+    maskText, toMedHopDeck };
 });

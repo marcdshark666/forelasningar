@@ -5,3 +5,5 @@
 *.json
 !package.json
 node_modules/
+data/
+*.bak-*

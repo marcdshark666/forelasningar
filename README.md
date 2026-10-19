@@ -15,6 +15,13 @@ Fristående webbsida (ren HTML/CSS/JS, inga beroenden) där anteckningar, PLAUD-
 
 - **Ta bara med från (BT-start):** inställning med standard 2026-10-19 (sparas lokalt, går att ändra). Föreläsningar som startar före datumet sparas inte (sidan förklarar varför); bilder vars tid (EXIF/filnamn/filtid) ligger före sållas och listas som "före BT-start"; live-anteckning och transkript med äldre datum avvisas; JSON-import hoppar över äldre föreläsningar och bilder.
 
+## Kort till MedHop (delat kortformat)
+Knappen **🎓 Kort till MedHop** (biblioteket = alla föreläsningar, föreläsningssidan = bara den) laddar ner `medhop-forelasningar-<datum>.json` i MedHops deck-format (`_format: medhop-deck-v1`): `{id, title, emoji, color, segments:[{id, title, cards:[{type, front, back, tags}]}]}`, ett segment per föreläsning. Bara text (inga bilder), föreläsningar före "Ta bara med från" hoppas över, personnummer maskeras. Funktion: `toMedHopDeck()` i `forelasningar.js`.
+
+I MedHop (https://medhop.vercel.app): **Importera → Fil → välj filen → Spara kortlek**. Korten hamnar under "Mina kort" i den webbläsaren och repeteras med MedHops SM-2. Importerar du igen blir det en ny lek (ta bort den gamla först; repetitionsstatus följer inte med). Är du inloggad i MedHop följer "Mina kort" med till ditt konto.
+
+BT-material (PLAUD, foton, anteckningar på BT-sidan) går **inte** den här vägen: det synkas automatiskt till den privata MedHop-instansen på Tailscale (`medhop-privat`, MedHop-BT-Synk) och publiceras aldrig.
+
 ## Integritet
 Inget laddas upp. Sidan har ingen server och en Content-Security-Policy med `connect-src 'none'` spärrar alla nätverksanrop från sidans kod. Data finns bara i webbläsaren där den skapades – exportera för att flytta.
 

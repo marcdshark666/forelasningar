@@ -140,6 +140,7 @@
           <a class="btn" href="#/ny">+ Ny föreläsning</a>
           <label class="btn ghost" style="margin:0">Importera<input type="file" id="imp" accept=".json,application/json" hidden></label>
           ${list.length ? '<button class="btn ghost" id="expall" type="button">Exportera alla</button>' : ''}
+          ${list.length ? '<button class="btn ghost" id="medhop" type="button" title="Kortfil för MedHop → Importera → Fil">🎓 Kort till MedHop</button>' : ''}
         </div></div>
       <div class="panel">${cutoffHtml()}</div>
       <p class="privacy">Allt sparas bara i den här webbläsaren. Inget laddas upp automatiskt – bilderna kan vara patientnära eller föreställa andra, så dela exportfiler med eftertanke.</p>
@@ -156,6 +157,7 @@
     wireCutoff();
     $('#imp').addEventListener('change', (e) => importFile(e.target.files[0]).catch((err) => fail(err, 'Import')));
     const ea = $('#expall'); if (ea) ea.addEventListener('click', () => exportLectures(list).catch((err) => fail(err, 'Export')));
+    const mh = $('#medhop'); if (mh) mh.addEventListener('click', () => { try { exportMedHop(list); } catch (err) { fail(err, 'MedHop-export'); } });
   }
 
   /* ---------- export / import ---------- */
@@ -182,6 +184,18 @@
     a.download = `${name}-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  /* Kortfil i MedHops deck-format (bara text, inga bilder). MedHop sparar den lokalt under "Mina kort". */
+  function exportMedHop(list) {
+    const { deck, skipped, count } = F.toMedHopDeck(list, { cutoff: getCutoff() });
+    if (!count) { toast('Inga kort att exportera (inga föreläsningar med kort från ' + getCutoff() + ').'); return; }
+    const blob = new Blob([JSON.stringify(deck, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `medhop-forelasningar-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(`${count} kort från ${deck.segments.length} föreläsning${deck.segments.length === 1 ? '' : 'ar'}${skipped.length ? ` (${skipped.length} hoppades över)` : ''}. Öppna MedHop → Importera → Fil.`);
   }
   async function importFile(file) {
     if (!file) return;
@@ -553,6 +567,7 @@
         <a class="btn ghost" href="#/f/${encodeURIComponent(id)}/kortlista">Redigera kort (${(rec.cards || []).length})</a>
         <a class="btn ghost" href="#/redigera/${encodeURIComponent(id)}">Redigera / justera klocka</a>
         <button class="btn ghost" id="exp" type="button">Exportera</button>
+        <button class="btn ghost" id="medhop1" type="button" title="Kortfil för MedHop → Importera → Fil">🎓 Kort till MedHop</button>
         <button class="btn danger" id="del" type="button">Radera</button>
       </div>
       <input type="search" id="q" placeholder="Sök i föreläsningen …" aria-label="Sök i föreläsningen" style="margin-bottom:12px">
@@ -562,6 +577,7 @@
     $('#q').addEventListener('input', draw);
     wireLightbox($('#tl'), model, u);
     $('#exp').addEventListener('click', () => exportLectures([rec]).catch((e) => fail(e, 'Export')));
+    $('#medhop1').addEventListener('click', () => { try { exportMedHop([rec]); } catch (e) { fail(e, 'MedHop-export'); } });
     $('#del').addEventListener('click', async () => {
       if (!confirm(`Radera "${rec.title}" med alla bilder och kort? Det går inte att ångra (exportera först om du vill ha en kopia).`)) return;
       try { await store.remove(id); toast('Raderad'); location.hash = '#/'; } catch (e) { fail(e, 'Radering'); }

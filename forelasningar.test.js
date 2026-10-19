@@ -185,4 +185,30 @@ test('import sållar gamla föreläsningar och bilder', () => {
   assert.equal(accepted[0].droppedPhotos, 1);
 });
 
+/* ---- Export till MedHop (påhittade EXEMPEL-kort, inget riktigt innehåll) ---- */
+const exLectures = [
+  { id: 'ex-2', title: 'EXEMPEL: Andra föreläsningen', startedAt: '2026-10-21T09:00:00', photos: [{ id: 'p' }],
+    cards: [{ id: 'k3', question: 'EXEMPEL: fråga tre', answer: 'EXEMPEL: svar tre', category: 'Eget kort' }] },
+  { id: 'ex-1', title: 'EXEMPEL: Första föreläsningen', startedAt: '2026-10-20T13:00:00',
+    cards: [{ id: 'k1', question: 'EXEMPEL: fråga ett', answer: 'Svar med pnr 19900101-1234 i texten', category: 'Definition' },
+      { id: 'k2', question: '(tom fråga)', answer: 'x' }, { id: 'k2b', question: 'Utan svar', answer: '' }] },
+  { id: 'ex-gammal', title: 'EXEMPEL: före BT', startedAt: '2026-10-10T09:00:00', cards: [{ id: 'k0', question: 'q', answer: 'a' }] },
+  { id: 'ex-tom', title: 'EXEMPEL: inga kort', startedAt: '2026-10-22T09:00:00', cards: [] },
+];
+test('toMedHopDeck: MedHop-deckformat, ordning, gränsdatum, maskning', () => {
+  const { deck, skipped, count } = F.toMedHopDeck(exLectures, { now: '2026-10-22T12:00:00Z' });
+  assert.equal(deck._format, 'medhop-deck-v1');
+  assert.equal(typeof deck.id, 'string'); assert.equal(typeof deck.title, 'string');
+  assert.equal(count, 2);
+  assert.deepEqual(deck.segments.map((s) => s.id), ['fl-ex-1', 'fl-ex-2']);
+  assert.match(deck.segments[0].title, /^2026-10-20 · EXEMPEL/);
+  const c = deck.segments[0].cards[0];
+  assert.deepEqual(Object.keys(c).sort(), ['back', 'front', 'tags', 'type']);
+  assert.equal(c.type, 'basic');
+  assert.ok(!/1234/.test(c.back) && /\[MASKAT\]/.test(c.back));
+  assert.deepEqual(skipped.map((s) => s.reason).sort(), ['före gränsdatumet', 'inga kort']);
+  assert.ok(!JSON.stringify(deck).includes('photo'), 'inga bilder i exporten');
+});
+test('toMedHopDeck: tomt in ger tom lek', () => assert.equal(F.toMedHopDeck([]).count, 0));
+
 console.log(`forelasningar: ${n} prover gröna`);
